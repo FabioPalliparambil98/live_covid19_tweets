@@ -1,38 +1,24 @@
-# Extracting streaming data from Twitter, pre-processing, and loading into MySQL
-import credentials  # Import api/access_token keys from credentials.py
-import settings  # Import related setting constants from settings.py
 
+
+import credentials
+import settings
+import os
+import psycopg2
 import re
 import tweepy
-import psycopg2
-import mysql.connector
 import pandas as pd
 from textblob import TextBlob
 
 
-# Streaming With Tweepy
-# http://docs.tweepy.org/en/v3.4.0/streaming_how_to.html#streaming-with-tweepy
-
-
-# Override tweepy.StreamListener to add logic to on_status
 class MyStreamListener(tweepy.StreamListener):
-    '''
-    Tweets are known as “status updates”. So the Status class in tweepy has properties describing the tweet.
-    https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/tweet-object.html
-    '''
 
     def on_status(self, status):
-        '''
-        Extract info from tweets
-        '''
 
         if status.retweeted:
-            # Avoid retweeted info, and only original tweets will be received
             return True
-        # Extract attributes from each tweet
         id_str = status.id_str
         created_at = status.created_at
-        text = deEmojify(status.text)  # Pre-processing the text
+        text = deEmojify(status.text)
         sentiment = TextBlob(text).sentiment
         polarity = sentiment.polarity
         subjectivity = sentiment.subjectivity
@@ -50,19 +36,27 @@ class MyStreamListener(tweepy.StreamListener):
         retweet_count = status.retweet_count
         favorite_count = status.favorite_count
 
-        # Store all data in MySQL
-        try:
+        sql_cursor = connection.cursor()
+        sql = "INSERT INTO {} (id_str, created_at, text, polarity, subjectivity, user_created_at, user_location, user_description, user_followers_count, longitude, latitude, retweet_count, favorite_count) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)".format(
+            settings.table_name)
+        val = (id_str, created_at, text, polarity, subjectivity, user_created_at, user_location, \
+               user_description, user_followers_count, longitude, latitude, retweet_count, favorite_count)
+        sql_cursor.execute(sql, val)
+        connection.commit()
 
-            mycursor = mydb.cursor()
-            sql = "INSERT INTO {} (id_str, created_at, text, polarity, subjectivity, user_created_at, user_location, user_description, user_followers_count, longitude, latitude, retweet_count, favorite_count) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)".format(
-                settings.TABLE_NAME)
-            val = (id_str, created_at, text, polarity, subjectivity, user_created_at, user_location, \
-                   user_description, user_followers_count, longitude, latitude, retweet_count, favorite_count)
-            mycursor.execute(sql, val)
-            mydb.commit()
-            mycursor.close()
-        except:
-            print('failed in on_status')
+        delete_query = '''
+        DELETE FROM {0}
+        WHERE id_str IN (
+            SELECT id_str 
+            FROM {0}
+            ORDER BY created_at asc
+            LIMIT 200) AND (SELECT COUNT(*) FROM covid19) > 9600;
+        '''.format(settings.table_name)
+
+        sql_cursor.execute(delete_query)
+
+        connection.commit()
+        sql_cursor.close()
 
     def on_error(self, status_code):
         '''
@@ -77,7 +71,8 @@ def clean_tweet(self, tweet):
     '''
     Use sumple regex statemnents to clean tweet text by removing links and special characters
     '''
-    return ' '.join(re.sub("(@[A-Za-z0-9]+)|([^0-9A-Za-z \t])|(\w+:\/\/\S+)", " ", tweet).split())
+    return ' '.join(re.sub("(@[A-Za-z0-9]+)|([^0-9A-Za-z \t]) \
+                                |(\w+:\/\/\S+)", " ", tweet).split())
 
 
 def deEmojify(text):
@@ -90,26 +85,29 @@ def deEmojify(text):
         return None
 
 
-mydb = psycopg2.connect("dbname='live_covid_tweet'"
-                        " user='postgres' "
-                        "host='localhost'"
-                        " password='maryjolly'"
-                        " connect_timeout=1 ")
+# DATABASE_URL = os.environ['DATABASE_URL']
+#
+# conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+# cur = conn.cursor()
 
+connection = psycopg2.connect("dbname='live_covid_tweet'"
+                              " user='postgres' "
+                              "host='localhost'"
+                              " password='maryjolly'"
+                              " connect_timeout=1 ")
 
-if mydb != 0:
-    mycursor = mydb.cursor()
-    mycursor.execute("""
+sql_cursor = connection.cursor()
+
+sql_cursor.execute("""
         SELECT COUNT(*)
         FROM information_schema.tables
         WHERE table_name = '{0}'
-        """.format(settings.TABLE_NAME))
-    # made it zero but maybe wrong
-    if mycursor.fetchone()[0] != 0:
-        mycursor.execute("CREATE TABLE {} ({})".format(settings.TABLE_NAME, settings.TABLE_ATTRIBUTES))
-        mydb.commit()
-    mycursor.close()
+        """.format(settings.table_name))
 
+if sql_cursor.fetchone()[0] == False:
+    sql_cursor.execute("CREATE TABLE {} ({});".format(settings.table_name, settings.table_attributes))
+    connection.commit()
+sql_cursor.close()
 
 auth = tweepy.OAuthHandler(credentials.api_key, credentials.api_security_key)
 auth.set_access_token(credentials.access_token, credentials.access_secret_token)
@@ -117,36 +115,6 @@ api = tweepy.API(auth)
 
 myStreamListener = MyStreamListener()
 myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
-myStream.filter(languages=["en"], track=settings.TRACK_WORDS)
+myStream.filter(languages=["en"], track=settings.data_on_word)
 
-mydb.close()
-
-#
-# import psycopg2
-#
-#
-#
-# try:
-#     conn = psycopg2.connect("dbname='de0nfk6t8kafcg'"
-#                             " user='lxylonnfjbtxcd' host='ec2-34-230-115-172.compute-1.amazonaws.com' password='5a432ed2df7cd422fe45daac0878b3f77b9558eaf0cb5ba3772a94357a1ae138' ")
-#
-#     print(conn)
-#     conn.close()
-# except:
-#     print('false')
-
-
-# import psycopg2
-#
-# try:
-#     conn = psycopg2.connect("dbname='live_covid_tweet'"
-#                             " user='postgres' "
-#                             "host='localhost'"
-#                             " password='maryjolly'"
-#                             " connect_timeout=1 ")
-#
-#     print(conn)
-#     conn.close()
-#     print(conn)
-# except:
-#     print('false')
+connection.close()

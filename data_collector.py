@@ -1,6 +1,3 @@
-
-
-import credentials
 import settings
 import os
 import psycopg2
@@ -85,17 +82,9 @@ def deEmojify(text):
         return None
 
 
-# DATABASE_URL = os.environ['DATABASE_URL']
-#
-# conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-# cur = conn.cursor()
+DATABASE_URL = os.environ['DATABASE_URL']
 
-connection = psycopg2.connect("dbname='live_covid_tweet'"
-                              " user='postgres' "
-                              "host='localhost'"
-                              " password='maryjolly'"
-                              " connect_timeout=1 ")
-
+connection = psycopg2.connect(DATABASE_URL, sslmode='require')
 sql_cursor = connection.cursor()
 
 sql_cursor.execute("""
@@ -109,8 +98,14 @@ if sql_cursor.fetchone()[0] == False:
     connection.commit()
 sql_cursor.close()
 
-auth = tweepy.OAuthHandler(credentials.api_key, credentials.api_security_key)
-auth.set_access_token(credentials.access_token, credentials.access_secret_token)
+CONSUMER_KEY = os.environ['CONSUMER_KEY']
+CONSUMER_SECRET = os.environ['CONSUMER_SECRET']
+ACCESS_KEY = os.environ['ACCESS_KEY']
+ACCESS_SECRET = os.environ['ACCESS_SECRET']
+
+
+auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
+auth.set_access_token(ACCESS_KEY, ACCESS_SECRET)
 api = tweepy.API(auth)
 
 myStreamListener = MyStreamListener()

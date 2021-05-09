@@ -85,6 +85,8 @@ def deEmojify(text):
 DATABASE_URL = os.environ['DATABASE_URL']
 
 connection = psycopg2.connect(DATABASE_URL, sslmode='require')
+
+
 sql_cursor = connection.cursor()
 
 sql_cursor.execute("""
@@ -93,7 +95,10 @@ sql_cursor.execute("""
         WHERE table_name = '{0}'
         """.format(settings.table_name))
 
-if sql_cursor.fetchone()[0] == False:
+table_check = bool(sql_cursor.rowcount)
+
+
+if table_check == False:
     sql_cursor.execute("CREATE TABLE {} ({});".format(settings.table_name, settings.table_attributes))
     connection.commit()
 sql_cursor.close()

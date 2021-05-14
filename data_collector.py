@@ -10,7 +10,7 @@ from textblob import TextBlob
 class MyStreamListener(tweepy.StreamListener):
 
     def on_status(self, status):
-
+        # Collecting the tweets and store into the SQL database.
         if status.retweeted:
             return True
         id_str = status.id_str
@@ -40,14 +40,14 @@ class MyStreamListener(tweepy.StreamListener):
                user_description, user_followers_count, longitude, latitude, retweet_count, favorite_count)
         sql_cursor.execute(sql, val)
         connection.commit()
-
+        # If the limit of the table exceeds delete old ones.
         delete_query = '''
         DELETE FROM {0}
         WHERE id_str IN (
             SELECT id_str 
             FROM {0}
             ORDER BY created_at asc
-            LIMIT 200) AND (SELECT COUNT(*) FROM covid19) > 9600;
+            LIMIT 200) AND (SELECT COUNT(*) FROM covid19) > 9500;
         '''.format(settings.table_name)
 
         sql_cursor.execute(delete_query)
@@ -56,37 +56,28 @@ class MyStreamListener(tweepy.StreamListener):
         sql_cursor.close()
 
     def on_error(self, status_code):
-        '''
-        Since Twitter API has rate limits, stop srcraping data as it exceed to the thresold.
-        '''
+        # Checking for error status codefrom twitter
         if status_code == 420:
             # return False to disconnect the stream
             return False
 
 
 def clean_tweet(self, tweet):
-    '''
-    Use sumple regex statemnents to clean tweet text by removing links and special characters
-    '''
+    # Cleaning the Tweets
     return ' '.join(re.sub("(@[A-Za-z0-9]+)|([^0-9A-Za-z \t]) \
                                 |(\w+:\/\/\S+)", " ", tweet).split())
 
 
 def deEmojify(text):
-    '''
-    Strip all non-ASCII characters to remove emoji characters
-    '''
+    # Cleaning all the emojies.
     if text:
         return text.encode('ascii', 'ignore').decode('ascii')
     else:
         return None
 
-
+# connect to the database
 DATABASE_URL = os.environ['DATABASE_URL']
-
 connection = psycopg2.connect(DATABASE_URL, sslmode='require')
-
-
 sql_cursor = connection.cursor()
 
 sql_cursor.execute("""
@@ -94,7 +85,7 @@ sql_cursor.execute("""
         FROM information_schema.tables
         WHERE table_name = '{0}'
         """.format(settings.table_name))
-
+# Checking if the table exists.
 table_check = bool(sql_cursor.rowcount)
 
 
@@ -102,6 +93,7 @@ if table_check == False:
     sql_cursor.execute("CREATE TABLE {} ({});".format(settings.table_name, settings.table_attributes))
     connection.commit()
 sql_cursor.close()
+
 
 CONSUMER_KEY = os.environ['CONSUMER_KEY']
 CONSUMER_SECRET = os.environ['CONSUMER_SECRET']

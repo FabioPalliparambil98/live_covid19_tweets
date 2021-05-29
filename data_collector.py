@@ -86,11 +86,12 @@ sql_cursor.execute("""
         WHERE table_name = '{0}'
         """.format(settings.table_name))
 # Checking if the table exists.
+table_check = bool(sql_cursor.rowcount)
+print(table_check)
 
-
-
-sql_cursor.execute("CREATE TABLE {} ({});".format(settings.table_name, settings.table_attributes))
-connection.commit()
+if table_check == False:
+    sql_cursor.execute("CREATE TABLE {} ({});".format(settings.table_name, settings.table_attributes))
+    connection.commit()
 sql_cursor.close()
 
 
